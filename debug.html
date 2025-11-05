@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Try-On - Debug</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        #debug-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.95);
+            padding: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+            font-family: monospace;
+            z-index: 1000;
+            border-bottom: 2px solid #FFFC00;
+        }
+
+        .debug-log {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .debug-log.error {
+            color: #ff4444;
+        }
+
+        .debug-log.success {
+            color: #44ff44;
+        }
+
+        .debug-log.info {
+            color: #4444ff;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            margin-top: 300px;
+        }
+
+        #canvas-output {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        canvas {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover;
+        }
+
+        #status {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 252, 0, 0.9);
+            color: #000;
+            padding: 12px 24px;
+            border-radius: 24px;
+            font-weight: bold;
+            z-index: 999;
+        }
+
+        .config-form {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+
+        .config-form input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #FFFC00;
+            color: #fff;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        .config-form button {
+            background: #FFFC00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .toggle-debug {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #FFFC00;
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            z-index: 1001;
+        }
+    </style>
+</head>
+<body>
+    <button class="toggle-debug" onclick="toggleDebug()">Hide Debug</button>
+
+    <div id="debug-panel">
+        <h3 style="color: #FFFC00; margin-bottom: 10px;">🔍 Debug Console</h3>
+        
+        <div class="config-form">
+            <h4 style="color: #FFFC00; margin-bottom: 8px;">Configuration</h4>
+            <input type="text" id="api-token-input" placeholder="Paste your API Token here">
+            <input type="text" id="lens-id-input" placeholder="Paste your Lens ID here (optional)">
+            <input type="text" id="group-id-input" placeholder="Paste your Group ID here (optional)">
+            <button onclick="startWithConfig()">Start Camera Kit</button>
+        </div>
+
+        <div id="logs"></div>
+    </div>
+
+    <div id="status">Waiting for configuration...</div>
+
+    <div id="container">
+        <div id="canvas-container">
+            <div id="canvas-output"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { bootstrapCameraKit, Transform2D } from 'https://cdn.jsdelivr.net/npm/@snap/camera-kit@latest/dist/index.esm.js';
+
+        let cameraKit, session, currentSource;
+        let debugVisible = true;
+
+        window.toggleDebug = function() {
+            debugVisible = !debugVisible;
+            document.getElementById('debug-panel').style.display = debugVisible ? 'block' : 'none';
+            document.querySelector('.toggle-debug').textContent = debugVisible ? 'Hide Debug' : 'Show Debug';
+        };
+
+        function log(message, type = 'info') {
+            const logsDiv = document.getElementById('logs');
+            const logEntry = document.createElement('div');
+            logEntry.className = `debug-log ${type}`;
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(logEntry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        window.startWithConfig = async function() {
+            const apiToken = document.getElementById('api-token-input').value.trim();
+            const lensId = document.getElementById('lens-id-input').value.trim();
+            const groupId = document.getElementById('group-id-input').value.trim();
+
+            if (!apiToken) {
+                log('❌ API Token is required!', 'error');
+                alert('Please enter your API Token');
+                return;
+            }
+
+            log('🚀 Starting Camera Kit initialization...', 'info');
+            updateStatus('Initializing...');
+
+            try {
+                await initializeCameraKit(apiToken, lensId, groupId);
+            } catch (error) {
+                log(`❌ Fatal error: ${error.message}`, 'error');
+                updateStatus('Failed - Check debug logs');
+            }
+        };
+
+        async function initializeCameraKit(apiToken, lensId, groupId) {
+            try {
+                // Step 1: Bootstrap
+                log('📦 Bootstrapping Camera Kit...', 'info');
+                updateStatus('Loading Camera Kit...');
+                
+                cameraKit = await bootstrapCameraKit({ apiToken });
+                log('✅ Camera Kit bootstrapped successfully', 'success');
+
+                // Step 2: Create Session
+                log('🎬 Creating session...', 'info');
+                updateStatus('Creating session...');
+                
+                session = await cameraKit.createSession();
+                log('✅ Session created successfully', 'success');
+
+                // Error handler
+                session.events.addEventListener('error', (event) => {
+                    log(`❌ Session error: ${JSON.stringify(event.detail)}`, 'error');
+                });
+
+                // Replace canvas
+                log('🖼️ Setting up canvas output...', 'info');
+                document.getElementById('canvas-output').replaceWith(session.output.live);
+                log('✅ Canvas ready', 'success');
+
+                // Step 3: Load Lens
+                if (lensId || groupId) {
+                    log('🔍 Loading lens...', 'info');
+                    updateStatus('Loading AR lens...');
+                    await loadLens(lensId, groupId);
+                } else {
+                    log('⚠️ No lens ID provided - running without lens', 'info');
+                }
+
+                // Step 4: Setup Camera
+                log('📷 Setting up camera...', 'info');
+                updateStatus('Requesting camera access...');
+                await setupCamera();
+
+                log('✅ Camera Kit fully initialized!', 'success');
+                updateStatus('✅ Ready!');
+
+            } catch (error) {
+                log(`❌ Error during initialization: ${error.message}`, 'error');
+                log(`Stack: ${error.stack}`, 'error');
+                updateStatus('❌ Initialization failed');
+                throw error;
+            }
+        }
+
+        async function loadLens(lensId, groupId) {
+            try {
+                let lens;
+
+                if (lensId) {
+                    log(`Loading lens by ID: ${lensId}`, 'info');
+                    lens = await cameraKit.lensRepository.loadLens(lensId);
+                    log(`✅ Lens loaded: ${lens.name || 'Unnamed'}`, 'success');
+                } else if (groupId) {
+                    log(`Loading lens group: ${groupId}`, 'info');
+                    const { lenses } = await cameraKit.lensRepository.loadLensGroups([groupId]);
+                    
+                    if (lenses && lenses.length > 0) {
+                        lens = lenses[0];
+                        log(`✅ Loaded ${lenses.length} lenses from group`, 'success');
+                        log(`Using first lens: ${lens.name || 'Unnamed'}`, 'info');
+                    } else {
+                        log('⚠️ No lenses found in group', 'error');
+                        return;
+                    }
+                }
+
+                if (lens) {
+                    log('Applying lens to session...', 'info');
+                    await session.applyLens(lens);
+                    log('✅ Lens applied successfully', 'success');
+                }
+
+            } catch (error) {
+                log(`❌ Lens loading error: ${error.message}`, 'error');
+                log('Continuing without lens...', 'info');
+            }
+        }
+
+        async function setupCamera() {
+            try {
+                log('Requesting camera permissions...', 'info');
+                
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+
+                log('✅ Camera permission granted', 'success');
+                log(`Stream: ${stream.getVideoTracks().length} video tracks`, 'info');
+
+                log('Creating media stream source...', 'info');
+                currentSource = await cameraKit.createMediaStreamSource(stream, {
+                    cameraType: 'front'
+                });
+
+                log('Setting transforms...', 'info');
+                currentSource.setTransform(Transform2D.MirrorX);
+
+                const isMobile = window.innerWidth <= 768;
+                const width = isMobile ? 480 : 1280;
+                const height = isMobile ? 640 : 720;
+                
+                log(`Setting render size: ${width}x${height}`, 'info');
+                currentSource.setRenderSize(width, height);
+
+                log('Attaching source to session...', 'info');
+                await session.setSource(currentSource);
+
+                log('Starting playback...', 'info');
+                await session.play('live');
+
+                log('✅ Camera is live!', 'success');
+
+            } catch (error) {
+                if (error.name === 'NotAllowedError') {
+                    log('❌ Camera permission denied by user', 'error');
+                } else if (error.name === 'NotFoundError') {
+                    log('❌ No camera found on device', 'error');
+                } else {
+                    log(`❌ Camera error: ${error.message}`, 'error');
+                }
+                throw error;
+            }
+        }
+
+        // Auto-start if URL parameters exist
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiToken = urlParams.get('apiToken');
+            const lensId = urlParams.get('lensId');
+            const groupId = urlParams.get('groupId');
+
+            if (apiToken) {
+                log('Found API token in URL parameters', 'info');
+                document.getElementById('api-token-input').value = apiToken;
+                if (lensId) document.getElementById('lens-id-input').value = lensId;
+                if (groupId) document.getElementById('group-id-input').value = groupId;
+                
+                setTimeout(() => startWithConfig(), 500);
+            } else {
+                log('⚠️ No configuration found. Please enter your API token.', 'info');
+            }
+        });
+    </script>
+</body>
+</html>
