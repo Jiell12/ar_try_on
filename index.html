@@ -1,33 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Snap Camera Kit Test</title>
-  <script type="module">
-    import { bootstrapCameraKit, Transform2D } from "https://cdn.jsdelivr.net/npm/@snap/camera-kit@latest";
 
-    // 🪪 Replace this with your actual API Token from Snap Developer Portal
+  <!-- ✅ Load the prebuilt Camera Kit library -->
+  <script src="https://unpkg.com/@snap/camera-kit@latest/dist/camera-kit.js"></script>
+
+  <script>
+    // 🪪 Your Camera Kit API Token
     const JSON_WEB_TOKEN = "eyJhbGciOiJIUzI1NiIsImtpZCI6IkNhbnZhc1MyU0hNQUNQcm9kIiwidHlwIjoiSldUIn0.eyJhdWQiOiJjYW52YXMtY2FudmFzYXBpIiwiaXNzIjoiY2FudmFzLXMyc3Rva2VuIiwibmJmIjoxNzYxNTY4NjI5LCJzdWIiOiI5MzYxNzYzZi1mZjgzLTRmOWItYmNiNC0wMGMwMzI1MDU1Y2V-U1RBR0lOR35iZmY5MjBmYy1kZDQ2LTQwMjYtYjczNC01NTNlOWQwYzA2OTgifQ.PMUnOz7IkERMzw8nL7iPjkdGFptauz5yA2piCiJWZV4";
 
-    // 👁️ Replace with your Lens Group ID (or Lens ID)
+    // 👁️ Your Lens Group ID
     const DEFAULT_GROUP_KEY = "71a776e8-19d7-42c1-a8c3-e8c84ddfc755";
 
     window.addEventListener("load", async () => {
       try {
-        console.log("🚀 Initializing Camera Kit...");
+        const { bootstrapCameraKit, Transform2D } = window.CameraKit;
 
-        // Step 1: Initialize Camera Kit with your token
+        console.log("🚀 Initializing Camera Kit...");
         const cameraKit = await bootstrapCameraKit({ apiToken: JSON_WEB_TOKEN });
 
-        // Step 2: Create a rendering session
         const session = await cameraKit.createSession();
-        session.events.addEventListener("error", (e) => console.error("Lens error:", e.detail));
+        session.events.addEventListener("error", (e) =>
+          console.error("Lens error:", e.detail)
+        );
 
-        // Step 3: Replace placeholder with camera canvas
+        // Replace placeholder with camera canvas
         document.getElementById("canvas-output").replaceWith(session.output.live);
 
-        // Step 4: Load lens group
         console.log("📦 Loading lenses...");
         const { lenses } = await cameraKit.lensRepository.loadLensGroups([DEFAULT_GROUP_KEY]);
 
@@ -36,19 +38,17 @@
           return;
         }
 
-        // Step 5: Apply first lens automatically (for testing)
         console.log("✨ Applying first lens:", lenses[0].name);
         await session.applyLens(lenses[0]);
 
-        // Step 6: Access webcam
+        // Access webcam
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         const source = cameraKit.createMediaStreamSource(stream);
         source.setTransform(Transform2D.MirrorX);
         await session.setSource(source);
 
-        // Step 7: Start rendering
+        // Start rendering
         session.play("live");
-
         console.log("✅ Camera Kit ready! You should see the lens effect now.");
       } catch (error) {
         console.error("❌ Camera Kit initialization failed:", error);
@@ -56,9 +56,15 @@
     });
   </script>
 </head>
-<body style="margin:0; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background:#111; color:white;">
+
+<body
+  style="margin:0; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background:#111; color:white;"
+>
   <h2>🎥 Snap Camera Kit Test</h2>
-  <div id="canvas-output" style="width:90vw; height:70vh; background:#222; display:flex; align-items:center; justify-content:center;">
+  <div
+    id="canvas-output"
+    style="width:90vw; height:70vh; background:#222; display:flex; align-items:center; justify-content:center;"
+  >
     <span>Loading Camera...</span>
   </div>
 </body>
